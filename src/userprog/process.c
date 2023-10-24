@@ -576,7 +576,33 @@ setup_stack(void **esp, char **argv, int argc)
   {
     success = install_page(((uint8_t *)PHYS_BASE) - PGSIZE, kpage, true);
     if (success)
+    {
       *esp = PHYS_BASE;
+
+      int i = argc;
+      uint32_t arr[argc];
+      while (--i >= 0)
+      {
+        *esp -= (strlen(argv[i]) + 1) * sizeof(char);
+        arr[i] = (uint32_t *)(*esp);
+        memcpy(*esp, argv[i], strlen(argv[i]) + 1);
+      }
+
+      *esp -= 4;
+      (*(int *)(*esp)) = 0; // sentinal
+      i = argc;
+      while (--i >= 0)
+      {
+        *esp -= 4;
+        (*(uintptr_t **)(*esp)) = arr[i];
+      }
+      *esp -= 4;
+      (*(uintptr_t **)(*esp)) = (*esp + 4);
+      *esp -= 4;
+      *(int *)(*esp) = argc;
+      *esp -= 4;
+      (*(int *)(*esp)) = 0;
+    }
     else
       palloc_free_page(kpage);
   }
@@ -600,4 +626,151 @@ install_page(void *upage, void *kpage, bool writable)
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
   return (pagedir_get_page(t->pagedir, upage) == NULL && pagedir_set_page(t->pagedir, upage, kpage, writable));
+}
+
+static void
+extract_command_name(char *cmd_string, char *command_name)
+{
+  char *save_ptr;
+  strlcpy(command_name, cmd_string, PGSIZE);
+  command_name = strtok_r(command_name, " ", &save_ptr);
+}
+
+static void
+extract_command_args(char *cmd_string, char *argv[], int *argc)
+{
+  char *save_ptr;
+  argv[0] = strtok_r(cmd_string, " ", &save_ptr);
+  char *token;
+  *argc = 1;
+  while ((token = strtok_r(NULL, " ", &save_ptr)) != NULL)
+  {
+    argv[(*argc)++] = token;
+  }
+}
+
+static int
+allocate_id(void)
+{
+  return thread_current()->next_fd++;
+}
+
+struct fd_entry
+{
+  int fd;
+  struct file *file;
+  struct list_elem elem;
+}
+
+static struct fd_entry *
+get_fd_entry(int fd)
+{
+  struct list_elem *e;
+  struct fd_entry *fe = NULL;
+  struct list *fd_table = &thread_current()->desc_table;
+
+  for (e = list_begin(fd_table); e != list_end(fd_table); e = listnext(e))
+  {
+    struct fd_entry *tmp = list_entry(e, struct fd_entry, elem);
+    if (tmp->fd == fd)
+    {
+      fe = tmp;
+      break;
+    }
+  }
+
+  return fe;
+}
+
+int process_open(const char *file_name)
+{
+  struct file *f = filesys_open(file_name);
+  if (f == NULL)
+    return -1;
+  struct fd_entry *fd_entry = malloc(sizeof(struct fd_entry));
+  if (fd_entry == NULL)
+    return -1;
+  fd_entry->fd = allocate_fd();
+  fd_entry->file = f;
+  list_push_back(&thread_current()->desc_table, &fd_entry->elem);
+
+  return fd_entry->fd;
+}
+
+int process_write(int fd, const void *buffer, unsigned size)
+{
+  if (fd == STDOUT_FILENO)
+  {
+    putbuf((char *)buffer, (size_t)size);
+    return (int)size;
+  }
+  else if (get_fd_entry(fd) != NULL)
+  {
+    return (int)file_write(get_fd_entry(fd)->file, buffer, size);
+  }
+  return -1;
+}
+
+void process_close(int fd)
+{
+  if (get_fd_entry(fd) != NULL)
+  {
+    struct fd_entry *fd_entry = get_fd_entry(fd);
+    file_close(fd_entry->file);
+    list_remove(&fd_entry->elem);
+    free(fd_entry);
+  }
+}
+
+int process_read(int fd, void *buffer, unsigned length)
+{
+  if (get_fd_entry(fd) != NULL)
+  {
+    struct fd_entry *fd_entry = get_fd_entry(fd);
+    return file_read(fd_entry->file, buffer, length);
+  }
+  return -1;
+}
+
+int process_filesize(int fd)
+{
+  if (get_fd_entry(fd) != NULL)
+  {
+    struct fd_entry *fd_entry = get_fd_entry(fd);
+    return file_length(fd_entry->file);
+  }
+  return -1;
+}
+
+int process_tell(int fd)
+{
+  if (get_fd_entry(fd) != NULL)
+  {
+    struct fd_entry *fd_entry = get_fd_entry(fd);
+    return file_tell(fd_entry->file);
+  }
+  return -1;
+}
+void process_seek(int fd, unsigned position)
+{
+  if (get_fd_entry(fd) != NULL)
+  {
+    struct fd_entry *fd_entry = get_fd_entry(fd);
+    file_seek(fd_entry->file, position);
+  }
+}
+
+// close all open files (including the executable)
+void process_close_all(void)
+{
+  struct list *fd_table = &thread_current()->desc_table;
+  struct list_elem *e = list_begin(fd_table);
+  while (e != list_end(fd_table))
+  {
+    struct fd_entry *tmp = list_entry(e, struct fd_entry, elem);
+    e = list_next(e);
+    process_close(tmp->fd);
+  }
+  // close the executable
+  file_close(thread_current()->executable);
 }
