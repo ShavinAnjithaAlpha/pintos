@@ -99,7 +99,7 @@ struct thread
    uint32_t *pagedir; /* Page directory. */
    char *prog_name;   /* Program name. */
 
-   tid_t parent_id;
+   tid_t parent_tid;
    struct list desc_table;
    int next_fd;
    struct file *executable; // file strucure for referencing to the executable file, used to deny the writing to the file as long as process is running

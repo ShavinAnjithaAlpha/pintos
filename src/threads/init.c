@@ -182,7 +182,7 @@ int pintos_init(void)
 
   /* Finish up. */
   shutdown();
-  thread_exit();
+  thread_exit(0);
 }
 
 /* Read the line from the console into the cmd character buffer

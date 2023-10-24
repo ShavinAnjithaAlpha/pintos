@@ -449,7 +449,7 @@ kernel_thread(thread_func *function, void *aux)
 
   intr_enable(); /* The scheduler runs with interrupts off. */
   function(aux); /* Execute the thread function. */
-  thread_exit(); /* If function() returns, kill the thread. */
+  thread_exit(0); /* If function() returns, kill the thread. */
 }
 
 /* Returns the running thread. */
@@ -635,7 +635,7 @@ struct thread *thread_get(tid_t tid)
 bool thread_is_parent_od(tid_t tid)
 {
   struct thread *t = thread_get(tid);
-  if (t == NULL || t->parent_id != thread_tid())
+  if (t == NULL || t->parent_tid != thread_tid())
   {
     return false;
   }

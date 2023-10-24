@@ -37,7 +37,7 @@ struct process_exit_status
   int status;
   pid_t pid;
   pid_t parent_id;
-}
+};
 
 // list that leep track of all died process in the system
 static struct list process_history_list;
@@ -47,7 +47,7 @@ struct process_waiting
   struct list_elem elem;
   struct semaphore sem;
   pid_t waiting_for;
-}
+};
 
 static struct list
     process_waiting_list;
@@ -162,60 +162,6 @@ start_process(void *args)
    does nothing. */
 int process_wait(tid_t child_tid)
 {
-  if (thread_get(child_tid) == NULL)
-  {
-    if (!thread_is_parent_of(child_tid))
-      return -1;
-  }
-  // thread still running
-  struct process_waiting *pw = malloc(siezof(struct process_waiting));
-  sema_init(&pw->sem, 0);
-  pw->waiting_for = child_tid;
-  list_push_back(&process_waiting_list, &pw->elem);
-  sema_down(&pw->sem);
-}
-
-struct list_elem *e;
-for (e = list_begin(&process_history_list); e != list_end(&process_history_list); e = list_next(e))
-{
-  struct process_exit_status *pe = list_entry(e, struct process_exit_status, elem);
-  if (pe->pid == child_id && pe->parent_id == thread_tid())
-  {
-    list_remove(e);
-    int st = pe->status;
-    free(pe);
-    return st;
-  }
-
-  return -1;
-}
-
-/* Free the current process's resources. */
-void process_exit(int status)
-{
-  struct thread *cur = thread_current();
-  struct process_exit_status *ph = malloc(sizeof(struct process_exit_status));
-  ph->status = statuc;
-  ph->pid = thread_tid();
-  ph->parent_id = cur->parent_tid;
-  list_push_back(&process_history_list, &ph->elem);
-
-  struct list_elem *e;
-  for (e = list_begin(&process_waiting_list); e != list_end(&process_waiting_list); e = list_next(e))
-  {
-    if (list_entry(e, struct process_waiting, elem)->waiting_for == thread_tid())
-    {
-      break;
-    }
-  }
-
-  if (e != list_end(&process_waiting_list))
-  {
-    struct process_waiting *pw = list_entry(e, struct process_waiting, elem);
-    sema_up(&pw->sem);
-    list_remove(e);
-    free(pw);
-  }
 
   // return if it is a kernel thread
   if (thread_tid() == 1)
@@ -660,10 +606,9 @@ struct fd_entry
   int fd;
   struct file *file;
   struct list_elem elem;
-}
+};
 
-static struct fd_entry *
-get_fd_entry(int fd)
+static struct fd_entry *get_fd_entry(int fd)
 {
   struct list_elem *e;
   struct fd_entry *fe = NULL;
