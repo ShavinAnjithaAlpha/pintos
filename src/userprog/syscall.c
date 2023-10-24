@@ -14,7 +14,7 @@
 static void syscall_handler (struct intr_frame *);
 
 static void handle_invalid_access (void);
-static struct file_desc *find_file_desc (int fd);
+static struct file_block *find_file_desc (int fd);
 static bool put_user (uint8_t *udst, uint8_t byte);
 static int get_user (const uint8_t *uaddr);
 static int mem_read (void *src, void *dest, size_t bytes);
@@ -197,7 +197,7 @@ sys_exit (int status)
   struct process_control_block *pcb = thread_current ()->pcb;
   pcb->exited = true;
   pcb->exit_code = status;
-  sema_up (&pcb->waiting_sema);
+  sema_up (&pcb->wait_sem);
   thread_exit ();
 }
 
@@ -264,7 +264,7 @@ int
 sys_open (const char *filename)
 {
   struct file *opened_file;
-  struct file_desc *f_desc;
+  struct file_block *f_desc;
   if (get_user (filename) == -1)
     handle_invalid_access ();
 
@@ -292,7 +292,7 @@ sys_open (const char *filename)
 int
 sys_filesize (int fd)
 {
-  struct file_desc *f_desc = find_file_desc (fd);
+  struct file_block *f_desc = find_file_desc (fd);
 
   if (f_desc == NULL)
     return -1;
@@ -319,7 +319,7 @@ sys_read (int fd, void *buffer, unsigned size)
   else
     {
       lock_acquire (&filesys_lock);
-      struct file_desc *f_desc = find_file_desc (fd);
+      struct file_block *f_desc = find_file_desc (fd);
 
       if (f_desc && f_desc->file)
         {
@@ -349,7 +349,7 @@ sys_write (int fd, const void *buffer, unsigned size)
   else
     {
       lock_acquire (&filesys_lock);
-      struct file_desc *f_desc = find_file_desc (fd);
+      struct file_block *f_desc = find_file_desc (fd);
 
       if (f_desc && f_desc->file)
         {
@@ -369,7 +369,7 @@ void
 sys_seek (int fd, unsigned position)
 {
   lock_acquire (&filesys_lock);
-  struct file_desc *f_desc = find_file_desc (fd);
+  struct file_block *f_desc = find_file_desc (fd);
 
   if (f_desc && f_desc->file)
     {
@@ -387,7 +387,7 @@ unsigned
 sys_tell (int fd)
 {
   lock_acquire (&filesys_lock);
-  struct file_desc *f_desc = find_file_desc (fd);
+  struct file_block *f_desc = find_file_desc (fd);
 
   if (f_desc && f_desc->file)
     {
@@ -406,7 +406,7 @@ void
 sys_close (int fd)
 {
   lock_acquire (&filesys_lock);
-  struct file_desc *f_desc = find_file_desc (fd);
+  struct file_block *f_desc = find_file_desc (fd);
 
   if (f_desc && f_desc->file)
     {
@@ -417,7 +417,7 @@ sys_close (int fd)
   lock_release (&filesys_lock);
 }
 
-static struct file_desc*
+static struct file_block*
 find_file_desc (int fd)
 {
   if (fd < 2)
@@ -429,12 +429,12 @@ find_file_desc (int fd)
     return NULL;
 
   struct list_elem *e;
-  struct file_desc *result = NULL;
+  struct file_block *result = NULL;
   for (e = list_begin (&t->file_descriptors); e != list_end (&t->file_descriptors);
        e = list_next (e))
     {
-      struct file_desc *f_desc =
-        list_entry (e, struct file_desc, elem);
+      struct file_block *f_desc =
+        list_entry (e, struct file_block, elem);
       if (f_desc->id == fd)
         {
           result = f_desc;
