@@ -89,13 +89,22 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
+    int64_t wake_up_tick;               /* Timer tick at which thread should be woken */
+
+    int original_priority;              /* Priority before donation. */
+    struct lock *waiting_lock;          /* Lock that this thread is waiting for. */
+    struct list donors;                 /* Threads that donated to this thread. */
+    struct list_elem donors_elem;       /* List element for donors list. */
 
     /* Shared between thread.c and synch.c. */
-    struct list_elem elem;              /* List element. */
+    struct list_elem elem;              /* List element for ready_list/sleep_list queue. */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    struct process_control_block *pcb;  /* Process control block. */
+    struct list child_list;             /* List of child processes. */
+    struct list file_descriptors;       /* List of open files. */
 #endif
 
     /* Owned by thread.c. */
@@ -110,7 +119,7 @@ extern bool thread_mlfqs;
 void thread_init (void);
 void thread_start (void);
 
-void thread_tick (void);
+void thread_tick (int64_t);
 void thread_print_stats (void);
 
 typedef void thread_func (void *aux);
@@ -118,6 +127,9 @@ tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
 void thread_block (void);
 void thread_unblock (struct thread *);
+
+void thread_sleep_until (int64_t);
+void wake_ready_threads (int64_t);
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);
@@ -132,10 +144,14 @@ void thread_foreach (thread_action_func *, void *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
+void thread_donate_priority (struct thread *target, int new_priority);
 
 int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+list_less_func comparator_thread_priority_desc;
+list_less_func comparator_donor_priority_desc;
 
 #endif /* threads/thread.h */
